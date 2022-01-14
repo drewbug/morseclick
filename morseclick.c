@@ -1,5 +1,6 @@
 #include <errno.h>
 #include <fcntl.h>
+#include <signal.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -129,8 +130,18 @@ static int send_event(int fd)
 	return uhid_write(fd, &ev);
 }
 
+volatile sig_atomic_t keep_going = 1;
+
+void handler(int signum)
+{
+  keep_going = 0;
+}
+
 int main(int argc, char **argv)
 {
+	const struct sigaction act = { .sa_handler = handler };
+	sigaction(SIGINT, &act, NULL);
+
 	int serial_tty = open(argv[1], O_RDONLY);
 	if (serial_tty < 0) { return EXIT_FAILURE; }
 
@@ -141,7 +152,7 @@ int main(int argc, char **argv)
 
 	int mctrl;
 
-	while (ioctl(serial_tty, TIOCMGET, &mctrl) == 0) {
+	while (keep_going && ioctl(serial_tty, TIOCMGET, &mctrl) == 0) {
 		bool keyed = mctrl & TIOCM_DSR;
 
 		if (btn1_down != keyed) {
